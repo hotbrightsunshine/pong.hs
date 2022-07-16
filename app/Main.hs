@@ -12,8 +12,10 @@ background :: Color
 background = white
 
 drawing :: Picture
-drawing = pictures [  circleSolid 20
-                    , rectangleSolid 40 20 ]
+drawing = pictures [  color circleColor $ circleSolid 10
+                    , color rectColor $ rectangleSolid 20 80 ]
+          where circleColor = light red
+                rectColor = dark blue
 
 main :: IO ()
 main = display window background drawing
