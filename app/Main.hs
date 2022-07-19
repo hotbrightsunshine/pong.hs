@@ -7,6 +7,7 @@ import Graphics.Gloss.Interface.IO.Interact
 isIn :: Ord a => a -> (a, a) -> Bool
 isIn z (x, y) = z >= x && z <= y
 
+data Movement = GoUp | Idle | GoDown deriving (Show, Eq)
 
 window :: Display
 window = InWindow "Pong" (w, h) (offset, offset) 
@@ -20,29 +21,34 @@ background =  black
 
 
 data Pong = Game {
-    ballPos ::  (Float, Float)
-,   ballVel ::  (Float, Float)
-,   player1 ::  Float
-,   player2 ::  Float
-,   pause   ::  Bool
+    ballPos             ::  (Float, Float)
+,   ballVel             ::  (Float, Float)
+,   player1             ::  Float
+,   player2             ::  Float
+,   pause               ::  Bool
+,   player1Movement     ::  Movement
+,   player2Movement     ::  Movement
 } deriving Show
 
 
 initial :: Pong
 initial = Game {
-    ballPos =   (180, 40)
-,   ballVel =   (50, -150)
-,   player1 =   60
-,   player2 =   0
-,   pause = False
+    ballPos         =   (0, 0)
+,   ballVel         =   (100, -200)
+,   player1         =   60
+,   player2         =   0
+,   pause           = False
+, player1Movement   = Idle
+, player2Movement   = Idle
 }
 
 
 outOfBounds :: (Float, Float) -> Pong -> Pong
-outOfBounds dims game = if (fst (ballPos game)) `isIn` (-(fst dims) / 2, fst dims / 2) &&
-                           (snd (ballPos game)) `isIn` (-(snd dims) / 2, snd dims / 2)
+outOfBounds dims game = if fst (ballPos game) `isIn` (- fst dims / 2, fst dims / 2)
+                           &&
+                           snd (ballPos game) `isIn` (- snd dims / 2, snd dims / 2)
                         then game
-                        else error "Out of bounds!"
+                        else error "Non si può."
 
 
 render :: Pong -> Picture
@@ -69,6 +75,7 @@ render  game =  pictures    [ ball, walls,
 
                     paddle1 = makePaddle white (-225) (player1 game)
                     paddle2 = makePaddle white 225 (player2 game)
+
 
 moveBall :: Float -> Pong -> Pong 
 moveBall time game = if not (pause game)
@@ -118,16 +125,16 @@ paddleCollided game = game { ballVel = (vx', vy) }
                 then -vx
                 else vx
 
-movePaddle1 :: Pong -> Float -> Float -> Float -> Pong
-movePaddle1 game incr bound pheight = game { player1 = pos' }
+moveIfCanPaddle1 :: Pong -> Float -> Float -> Float -> Pong
+moveIfCanPaddle1 game incr bound pheight = game { player1 = pos' }
     where
         pos' = if (player1 game + incr + (pheight / 2) >= bound / 2)
                   || (player1 game + incr - (pheight / 2) <= -(bound / 2))
                 then player1 game
                 else player1 game + incr
 
-movePaddle2 :: Pong -> Float -> Float -> Float -> Pong
-movePaddle2 game incr bound pheight = game { player2 = pos' }
+moveIfCanPaddle2 :: Pong -> Float -> Float -> Float -> Pong
+moveIfCanPaddle2 game incr bound pheight = game { player2 = pos' }
     where
         pos' = if (player2 game + incr + (pheight / 2) >= bound / 2)
                   || (player2 game + incr - (pheight / 2) <= -(bound / 2))
@@ -135,33 +142,37 @@ movePaddle2 game incr bound pheight = game { player2 = pos' }
                 else player2 game + incr
 
 
+movePaddle1 :: Pong -> Pong
+movePaddle1 game
+    | player1Movement game == GoUp      = moveIfCanPaddle1 game 2 300 80
+    | player1Movement game == GoDown    = moveIfCanPaddle1 game (-2) 300 80
+    | otherwise                         = game
+
+
+movePaddle2 :: Pong -> Pong
+movePaddle2 game
+    | player2Movement game == GoUp    = moveIfCanPaddle2 game 2 300 80
+    | player2Movement game == GoDown  = moveIfCanPaddle2 game (-2) 300 80
+    | otherwise                     = game
+
+
 event :: Event -> Pong -> Pong
 event (EventKey (Char 'p') Down _ _) game = game { pause = not (pause game) }
-event (EventKey (Char 's') Down _ _) game = if pause game
-                                                then
-                                                    game
-                                                else
-                                                    movePaddle1 game (-10) 300 80
-event (EventKey (Char 'w') Down _ _) game = if pause game
-                                                then
-                                                    game
-                                                else
-                                                    movePaddle1 game (10) 300 80
+event (EventKey (Char 's') Down _ _) game = game { player1Movement = GoDown }
+event (EventKey (Char 's') Up _ _) game = game { player1Movement = Idle }
+event (EventKey (Char 'w') Down _ _) game = game { player1Movement = GoUp }
+event (EventKey (Char 'w') Up _ _) game = game { player1Movement = Idle }
 
-event (EventKey (SpecialKey KeyDown) Down _ _) game = if pause game
-                                                then
-                                                    game
-                                                else
-                                                    movePaddle2 game (-10) 300 80
-event (EventKey (SpecialKey KeyUp) Down _ _) game = if pause game
-                                                then
-                                                    game
-                                                else
-                                                    movePaddle2 game (10) 300 80
+event (EventKey (SpecialKey KeyDown) Down _ _) game = game { player2Movement = GoDown }
+event (EventKey (SpecialKey KeyDown) Up _ _) game = game { player2Movement = Idle }
+event (EventKey (SpecialKey KeyUp) Down _ _) game = game { player2Movement = GoUp }
+event (EventKey (SpecialKey KeyUp) Up _ _) game = game { player2Movement = Idle }
+
 event _ game = game
+
 
 main :: IO ()
 main = play window background 75 initial render event update
     where 
         update :: Float -> Pong -> Pong
-        update seconds = outOfBounds (300, 500) . wallCollided . paddleCollided . moveBall seconds
+        update seconds = outOfBounds (500, 300) . movePaddle1 . movePaddle2 . wallCollided . paddleCollided . moveBall seconds
